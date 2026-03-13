@@ -203,7 +203,9 @@ const AiMessageBubble: React.FC<AiMessageBubbleProps> = ({
       </ReactMarkdown>
       <Button
         variant="default"
-        className="cursor-pointer bg-neutral-700 border-neutral-600 text-neutral-300 self-end"
+        className={`cursor-pointer bg-neutral-700 border-neutral-600 text-neutral-300 self-end ${
+          message.content.length > 0 ? "visible" : "hidden"
+        }`}
         onClick={() =>
           handleCopy(
             typeof message.content === "string"
@@ -250,10 +252,9 @@ export function ChatMessagesView({
       console.error("Failed to copy text: ", err);
     }
   };
-
   return (
     <div className="flex flex-col h-full">
-      <ScrollArea className="flex-grow" ref={scrollAreaRef}>
+      <ScrollArea className="flex-1 overflow-y-auto" ref={scrollAreaRef}>
         <div className="p-4 md:p-6 space-y-2 max-w-4xl mx-auto pt-16">
           {messages.map((message, index) => {
             const isLast = index === messages.length - 1;

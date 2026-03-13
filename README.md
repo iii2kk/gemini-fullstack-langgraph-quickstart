@@ -2,7 +2,7 @@
 
 This project demonstrates a fullstack application using a React frontend and a LangGraph-powered backend agent. The agent is designed to perform comprehensive research on a user's query by dynamically generating search terms, querying the web using Google Search, reflecting on the results to identify knowledge gaps, and iteratively refining its search until it can provide a well-supported answer with citations. This application serves as an example of building research-augmented conversational AI using LangGraph and Google's Gemini models.
 
-![Gemini Fullstack LangGraph](./app.png)
+<img src="./app.png" title="Gemini Fullstack LangGraph" alt="Gemini Fullstack LangGraph" width="90%">
 
 ## Features
 
@@ -12,7 +12,7 @@ This project demonstrates a fullstack application using a React frontend and a L
 - 🌐 Integrated web research via Google Search API.
 - 🤔 Reflective reasoning to identify knowledge gaps and refine searches.
 - 📄 Generates answers with citations from gathered sources.
-- 🔄 Hot-reloading for both frontend and backend development during development.
+- 🔄 Hot-reloading for both frontend and backend during development.
 
 ## Project Structure
 
@@ -28,7 +28,7 @@ Follow these steps to get the application running locally for development and te
 **1. Prerequisites:**
 
 -   Node.js and npm (or yarn/pnpm)
--   Python 3.8+
+-   Python 3.11+
 -   **`GEMINI_API_KEY`**: The backend agent requires a Google Gemini API key.
     1.  Navigate to the `backend/` directory.
     2.  Create a file named `.env` by copying the `backend/.env.example` file.
@@ -65,7 +65,7 @@ _Alternatively, you can run the backend and frontend development servers separat
 
 The core of the backend is a LangGraph agent defined in `backend/src/agent/graph.py`. It follows these steps:
 
-![Agent Flow](./agent.png)
+<img src="./agent.png" title="Agent Flow" alt="Agent Flow" width="50%">
 
 1.  **Generate Initial Queries:** Based on your input, it generates a set of initial search queries using a Gemini model.
 2.  **Web Research:** For each query, it uses the Gemini model with the Google Search API to find relevant web pages.
@@ -73,13 +73,25 @@ The core of the backend is a LangGraph agent defined in `backend/src/agent/graph
 4.  **Iterative Refinement:** If gaps are found or the information is insufficient, it generates follow-up queries and repeats the web research and reflection steps (up to a configured maximum number of loops).
 5.  **Finalize Answer:** Once the research is deemed sufficient, the agent synthesizes the gathered information into a coherent answer, including citations from the web sources, using a Gemini model.
 
+## CLI Example
+
+For quick one-off questions you can execute the agent from the command line. The
+script `backend/examples/cli_research.py` runs the LangGraph agent and prints the
+final answer:
+
+```bash
+cd backend
+python examples/cli_research.py "What are the latest trends in renewable energy?"
+```
+
+
 ## Deployment
 
 In production, the backend server serves the optimized static frontend build. LangGraph requires a Redis instance and a Postgres database. Redis is used as a pub-sub broker to enable streaming real time output from background runs. Postgres is used to store assistants, threads, runs, persist thread state and long term memory, and to manage the state of the background task queue with 'exactly once' semantics. For more details on how to deploy the backend server, take a look at the [LangGraph Documentation](https://langchain-ai.github.io/langgraph/concepts/deployment_options/). Below is an example of how to build a Docker image that includes the optimized frontend build and the backend server and run it via `docker-compose`.
 
 _Note: For the docker-compose.yml example you need a LangSmith API key, you can get one from [LangSmith](https://smith.langchain.com/settings)._
 
-_Note: If you are not running the docker-compose.yml example or exposing the backend server to the public internet, you update the `apiUrl` in the `frontend/src/App.tsx` file your host. Currently the `apiUrl` is set to `http://localhost:8123` for docker-compose or `http://localhost:2024` for development._
+_Note: If you are not running the docker-compose.yml example or exposing the backend server to the public internet, you should update the `apiUrl` in the `frontend/src/App.tsx` file to your host. Currently the `apiUrl` is set to `http://localhost:8123` for docker-compose or `http://localhost:2024` for development._
 
 **1. Build the Docker Image:**
 
