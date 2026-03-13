@@ -8,6 +8,17 @@ from langgraph.graph import StateGraph
 from langgraph.graph import START, END
 from langchain_core.runnables import RunnableConfig
 from google.genai import Client
+import logging
+
+# ロガーの設定 (スクリプトの最初の方で行う)
+# ログレベルやフォーマットは必要に応じて調整
+# DEBUGレベルにすると、より詳細な情報が出力されます
+# logging.basicConfig(
+#     level=logging.DEBUG,  # INFO にすると info以上のログのみ出力
+#     format='%(asctime)s - %(levelname)s - %(name)s - %(funcName)s - %(message)s'
+# )
+# このモジュール用のロガーを取得
+logger = logging.getLogger(__name__)
 
 from agent.state import (
     OverallState,
@@ -54,6 +65,10 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     Returns:
         Dictionary with state update, including search_query key containing the generated query
     """
+    print("--------------------------------")
+    print("--- generate_query INPUT ---")
+    logger.info("Starting query generation.") # 関数開始ログ
+    
     configurable = Configuration.from_runnable_config(config)
 
     # check for custom initial search query count
@@ -71,13 +86,27 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
 
     # Format the prompt
     current_date = get_current_date()
+    research_topic_str = get_research_topic(state["messages"]) # ログ用に事前に取得
     formatted_prompt = query_writer_instructions.format(
         current_date=current_date,
-        research_topic=get_research_topic(state["messages"]),
+        research_topic=research_topic_str,
         number_queries=state["initial_search_query_count"],
     )
+    # --- ログ出力 (入力) ---
+    print("--------------------------------")
+    print(f"Gemini API Input (generate_query) for topic '{research_topic_str}':\nPrompt:\n{formatted_prompt}")
+    logger.debug(f"Gemini API Input (generate_query) for topic '{research_topic_str}':\nPrompt:\n{formatted_prompt}")
+
     # Generate the search queries
     result = structured_llm.invoke(formatted_prompt)
+
+    # --- ログ出力 (出力) ---
+    print("--------------------------------")
+    print(f"Gemini API Output (generate_query):\nGenerated Queries: {result.query}")
+    print("Query generation finished.")
+    logger.debug(f"Gemini API Output (generate_query):\nGenerated Queries: {result.query}")
+    logger.info("Query generation finished.") # 関数終了ログ
+
     return {"query_list": result.query}
 
 
@@ -105,11 +134,20 @@ def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
         Dictionary with state update, including sources_gathered, research_loop_count, and web_research_results
     """
     # Configure
+    search_query_str = state["search_query"] # ログ用に事前に取得
+    print("--------------------------------")
+    print(f"Starting web research for query: '{search_query_str}'")
+    logger.info(f"Starting web research for query: '{search_query_str}'")
     configurable = Configuration.from_runnable_config(config)
     formatted_prompt = web_searcher_instructions.format(
         current_date=get_current_date(),
-        research_topic=state["search_query"],
+        research_topic=search_query_str,
     )
+
+    # --- ログ出力 (入力) ---
+    print("--------------------------------")
+    print(f"Gemini API Input (web_research) for query '{search_query_str}':\nPrompt:\n{formatted_prompt}\nConfig for tools: {{'google_search': {{}}}}")
+    logger.debug(f"Gemini API Input (web_research) for query '{search_query_str}':\nPrompt:\n{formatted_prompt}\nConfig for tools: {{'google_search': {{}}}}")
 
     # Uses the google genai client as the langchain client doesn't return grounding metadata
     response = genai_client.models.generate_content(
@@ -121,6 +159,20 @@ def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
         },
     )
     # resolve the urls to short urls for saving tokens and time
+
+    # --- ログ出力: 出力 ---
+    # responseオブジェクト全体は非常に大きい場合があるので、主要な部分をログに出力
+    print("--------------------------------")
+    print(f"Gemini API Output Text:\n---\n{response.text}\n---")
+    logger.debug(f"Gemini API Output Text:\n---\n{response.text}\n---")
+    if response.candidates and response.candidates[0].grounding_metadata:
+        print(f"Gemini API Output Grounding Metadata (first chunk):\n---\n{response.candidates[0].grounding_metadata.grounding_chunks[0] if response.candidates[0].grounding_metadata.grounding_chunks else 'No grounding chunks'}\n---")
+        logger.debug(f"Gemini API Output Grounding Metadata (first chunk):\n---\n{response.candidates[0].grounding_metadata.grounding_chunks[0] if response.candidates[0].grounding_metadata.grounding_chunks else 'No grounding chunks'}\n---")
+    else:
+        print("Gemini API Output: No grounding metadata found.")
+        logger.debug("Gemini API Output: No grounding metadata found.")
+
+
     resolved_urls = resolve_urls(
         response.candidates[0].grounding_metadata.grounding_chunks, state["id"]
     )
@@ -162,6 +214,12 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
         research_topic=get_research_topic(state["messages"]),
         summaries="\n\n---\n\n".join(state["web_research_result"]),
     )
+
+    # --- ログ出力: 入力 ---
+    print("--------------------------------")
+    print(f"Gemini API Input:\n---\n{formatted_prompt}\n---")
+    logger.debug(f"Gemini API Input:\n---\n{formatted_prompt}\n---")
+
     # init Reasoning Model
     llm = ChatGoogleGenerativeAI(
         model=reasoning_model,
@@ -170,6 +228,11 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
         api_key=os.getenv("GEMINI_API_KEY"),
     )
     result = llm.with_structured_output(Reflection).invoke(formatted_prompt)
+
+    # --- ログ出力: 出力 ---
+    print("--------------------------------")
+    print(f"Gemini API Output:\n---\n{result}\n---")
+    logger.debug(f"Gemini API Output:\n---\n{result}\n---")
 
     return {
         "is_sufficient": result.is_sufficient,
@@ -241,6 +304,11 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
         summaries="\n---\n\n".join(state["web_research_result"]),
     )
 
+    # --- ログ出力: 入力 ---
+    print("--------------------------------")
+    print(f"Gemini API Input:\n---\n{formatted_prompt}\n---")
+    logger.debug(f"Gemini API Input:\n---\n{formatted_prompt}\n---")
+
     # init Reasoning Model, default to Gemini 2.5 Flash
     llm = ChatGoogleGenerativeAI(
         model=reasoning_model,
@@ -249,6 +317,12 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
         api_key=os.getenv("GEMINI_API_KEY"),
     )
     result = llm.invoke(formatted_prompt)
+
+    # --- ログ出力: 出力 ---
+    # result は AIMessage なので、.content を見ると良い
+    print("--------------------------------")
+    print(f"Gemini API Output:\n---\n{result.content}\n---")
+    logger.debug(f"Gemini API Output:\n---\n{result.content}\n---")
 
     # Replace the short urls with the original urls and add all used urls to the sources_gathered
     unique_sources = []
