@@ -1,28 +1,88 @@
-# mypy: disable - error - code = "no-untyped-def,misc"
+import json
 import pathlib
-from fastapi import FastAPI, Response
-from fastapi.staticfiles import StaticFiles
+from typing import List
 
-# Define the FastAPI app
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from agent.agent_runner import run_research_pipeline
+from agent.configuration import Configuration
+
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ---------------------------------------------------------------------------
+# Request schema
+# ---------------------------------------------------------------------------
+
+class MessageInput(BaseModel):
+    type: str
+    content: str
+    id: str = ""
+
+
+class ResearchRequest(BaseModel):
+    messages: List[MessageInput]
+    initial_search_query_count: int = 3
+    max_research_loops: int = 2
+    reasoning_model: str = "gemini-2.5-pro"
+
+
+# ---------------------------------------------------------------------------
+# SSE research endpoint
+# ---------------------------------------------------------------------------
+
+@app.post("/api/research/stream")
+async def research_stream(request: ResearchRequest):
+    messages = [m.model_dump() for m in request.messages]
+    config = Configuration.from_config()
+
+    async def event_generator():
+        try:
+            async for event in run_research_pipeline(
+                messages=messages,
+                initial_search_query_count=request.initial_search_query_count,
+                max_research_loops=request.max_research_loops,
+                reasoning_model=request.reasoning_model,
+                config=config,
+            ):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        finally:
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Frontend static file serving
+# ---------------------------------------------------------------------------
 
 def create_frontend_router(build_dir="../frontend/dist"):
-    """Creates a router to serve the React frontend.
-
-    Args:
-        build_dir: Path to the React build directory relative to this file.
-
-    Returns:
-        A Starlette application serving the frontend.
-    """
     build_path = pathlib.Path(__file__).parent.parent.parent / build_dir
 
     if not build_path.is_dir() or not (build_path / "index.html").is_file():
         print(
             f"WARN: Frontend build directory not found or incomplete at {build_path}. Serving frontend will likely fail."
         )
-        # Return a dummy router if build isn't ready
         from starlette.routing import Route
 
         async def dummy_frontend(request):
@@ -37,7 +97,6 @@ def create_frontend_router(build_dir="../frontend/dist"):
     return StaticFiles(directory=build_path, html=True)
 
 
-# Mount the frontend under /app to not conflict with the LangGraph API routes
 app.mount(
     "/app",
     create_frontend_router(),

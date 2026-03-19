@@ -2,8 +2,6 @@ import os
 from pydantic import BaseModel, Field
 from typing import Any, Optional
 
-from langchain_core.runnables import RunnableConfig
-
 
 class Configuration(BaseModel):
     """The configuration for the agent."""
@@ -40,17 +38,15 @@ class Configuration(BaseModel):
     )
 
     @classmethod
-    def from_runnable_config(
-        cls, config: Optional[RunnableConfig] = None
+    def from_config(
+        cls, config: Optional[dict] = None
     ) -> "Configuration":
-        """Create a Configuration instance from a RunnableConfig."""
-        configurable = (
-            config["configurable"] if config and "configurable" in config else {}
-        )
+        """Create a Configuration instance from a config dict."""
+        config = config or {}
 
         # Get raw values from environment or config
         raw_values: dict[str, Any] = {
-            name: os.environ.get(name.upper(), configurable.get(name))
+            name: os.environ.get(name.upper(), config.get(name))
             for name in cls.model_fields.keys()
         }
 

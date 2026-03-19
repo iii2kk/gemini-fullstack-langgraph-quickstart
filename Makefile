@@ -1,10 +1,9 @@
-.PHONY: help dev-frontend dev-backend dev
+.PHONY: help dev-frontend dev-backend
 
 help:
 	@echo "Available commands:"
 	@echo "  make dev-frontend    - Starts the frontend development server (Vite)"
 	@echo "  make dev-backend     - Starts the backend development server (Uvicorn with reload)"
-	@echo "  make dev             - Starts both frontend and backend development servers"
 
 dev-frontend:
 	@echo "Starting frontend development server..."
@@ -12,9 +11,4 @@ dev-frontend:
 
 dev-backend:
 	@echo "Starting backend development server..."
-	@cd backend && langgraph dev
-
-# Run frontend and backend concurrently
-dev:
-	@echo "Starting both frontend and backend development servers..."
-	@make dev-frontend & make dev-backend 
+	@cd backend && uv run uvicorn agent.app:app --host 0.0.0.0 --port 8000 --reload --app-dir src
