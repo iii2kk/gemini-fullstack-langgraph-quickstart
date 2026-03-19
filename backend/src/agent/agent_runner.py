@@ -189,7 +189,7 @@ def _web_research_sync(
         current_date=get_current_date(),
         research_topic=search_query,
     )
-    resolved_model = model or config.query_generator_model
+    resolved_model = config.query_generator_model
     genai_client = _create_genai_client(config)
     logger.info(f"\n{SEP}\n[web_research] REQUEST\n  model : {resolved_model}\n  query : {search_query}\n  tools : google_search\n  prompt:\n{formatted_prompt}\n{SEP}")
 
