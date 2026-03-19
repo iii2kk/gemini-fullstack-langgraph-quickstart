@@ -19,9 +19,9 @@ from typing import AsyncGenerator, Any, Callable
 
 from dotenv import load_dotenv
 from google.genai import Client
-from langchain_google_genai import ChatGoogleGenerativeAI
 
 from agent.configuration import Configuration
+from agent.llm_factory import LLMFactory
 from agent.tools_and_schemas import SearchQueryList, Reflection
 from agent.prompts import (
     get_current_date,
@@ -68,7 +68,7 @@ SEP = "=" * 60
 # Rate limiter: 1 API call per RATE_LIMIT_INTERVAL seconds
 # ---------------------------------------------------------------------------
 
-RATE_LIMIT_INTERVAL = 30.0  # seconds
+RATE_LIMIT_INTERVAL = 10.0  # seconds
 
 
 class _RateLimiter:
@@ -145,10 +145,11 @@ async def _rate_limited(fn: Callable, *args: Any, max_attempts: int = 5) -> Any:
 
     raise RuntimeError("max_attempts を超えました")
 
-if os.getenv("GEMINI_API_KEY") is None:
-    raise ValueError("GEMINI_API_KEY is not set")
-
-genai_client = Client(api_key=os.getenv("GEMINI_API_KEY"))
+def _create_genai_client(config: Configuration) -> Client:
+    api_key = config.gemini_api_key or os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is not set")
+    return Client(api_key=api_key)
 
 
 # ---------------------------------------------------------------------------
@@ -161,11 +162,10 @@ def _generate_queries_sync(
     config: Configuration,
     model: str | None = None,
 ) -> list:
-    llm = ChatGoogleGenerativeAI(
+    llm = LLMFactory(config).create_chat_model(
         model=model or config.query_generator_model,
         temperature=1.0,
         max_retries=0,
-        api_key=os.getenv("GEMINI_API_KEY"),
     )
     structured_llm = llm.with_structured_output(SearchQueryList)
     formatted_prompt = query_writer_instructions.format(
@@ -190,6 +190,7 @@ def _web_research_sync(
         research_topic=search_query,
     )
     resolved_model = model or config.query_generator_model
+    genai_client = _create_genai_client(config)
     logger.info(f"\n{SEP}\n[web_research] REQUEST\n  model : {resolved_model}\n  query : {search_query}\n  tools : google_search\n  prompt:\n{formatted_prompt}\n{SEP}")
 
     response = genai_client.models.generate_content(
@@ -228,11 +229,10 @@ def _reflect_sync(
     reasoning_model: str,
     config: Configuration,
 ) -> dict:
-    llm = ChatGoogleGenerativeAI(
+    llm = LLMFactory(config).create_chat_model(
         model=reasoning_model or config.reflection_model,
         temperature=1.0,
         max_retries=0,
-        api_key=os.getenv("GEMINI_API_KEY"),
     )
     formatted_prompt = reflection_instructions.format(
         current_date=get_current_date(),
@@ -256,11 +256,10 @@ def _finalize_answer_sync(
     reasoning_model: str,
     config: Configuration,
 ) -> dict:
-    llm = ChatGoogleGenerativeAI(
+    llm = LLMFactory(config).create_chat_model(
         model=reasoning_model or config.answer_model,
         temperature=0,
         max_retries=0,
-        api_key=os.getenv("GEMINI_API_KEY"),
     )
     formatted_prompt = answer_instructions.format(
         current_date=get_current_date(),

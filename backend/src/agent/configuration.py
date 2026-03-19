@@ -6,6 +6,28 @@ from typing import Any, Optional
 class Configuration(BaseModel):
     """The configuration for the agent."""
 
+    llm_provider: str = Field(
+        default="gemini",
+        metadata={
+            "description": "The LLM provider to use. Supported values: gemini, openai_compatible."
+        },
+    )
+
+    gemini_api_key: str | None = Field(
+        default=None,
+        metadata={"description": "Optional Gemini API key override."},
+    )
+
+    openai_compatible_base_url: str | None = Field(
+        default=None,
+        metadata={"description": "Base URL for an OpenAI-compatible local LLM server."},
+    )
+
+    openai_compatible_api_key: str | None = Field(
+        default=None,
+        metadata={"description": "Optional API key for an OpenAI-compatible server."},
+    )
+
     query_generator_model: str = Field(
         default="gemini-2.0-flash",
         metadata={
