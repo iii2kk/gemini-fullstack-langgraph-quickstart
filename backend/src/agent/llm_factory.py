@@ -5,6 +5,14 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 from agent.configuration import Configuration
 
+DEFAULT_GEMINI_MODELS = [
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite-preview",
+]
+
+
 class LLMFactory:
     """Create chat model clients from configuration."""
 
@@ -60,5 +68,24 @@ class LLMFactory:
                 api_key=api_key,
                 base_url=base_url,
             )
+
+        raise ValueError(f"Unsupported llm_provider: {provider}")
+
+    def list_models(self) -> list[str]:
+        """List available model ids for the configured provider."""
+        provider = self._config.llm_provider
+
+        if provider == "gemini":
+            return DEFAULT_GEMINI_MODELS.copy()
+
+        if provider == "openai_compatible":
+            llm = self.create_chat_model(
+                model=self._config.answer_model,
+                temperature=0,
+                max_retries=0,
+            )
+            response = llm.root_client.models.list()
+            data = getattr(response, "data", response)
+            return sorted(model.id for model in data)
 
         raise ValueError(f"Unsupported llm_provider: {provider}")

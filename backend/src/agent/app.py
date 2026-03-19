@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from agent.agent_runner import run_research_pipeline
 from agent.configuration import Configuration
+from agent.llm_factory import LLMFactory
 
 app = FastAPI()
 
@@ -38,9 +39,27 @@ class ResearchRequest(BaseModel):
     reasoning_model: str = "gemini-2.5-pro"
 
 
+class ModelsResponse(BaseModel):
+    models: List[str]
+    default_model: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # SSE research endpoint
 # ---------------------------------------------------------------------------
+
+
+@app.get("/api/models", response_model=ModelsResponse)
+async def list_models():
+    config = Configuration.from_config()
+    models = LLMFactory(config).list_models()
+
+    default_model = config.answer_model
+    if default_model not in models and models:
+        default_model = models[0]
+
+    return ModelsResponse(models=models, default_model=default_model)
+
 
 @app.post("/api/research/stream")
 async def research_stream(request: ResearchRequest):

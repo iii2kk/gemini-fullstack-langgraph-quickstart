@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { SquarePen, Brain, Send, StopCircle, Zap, Cpu } from "lucide-react";
+import { SquarePen, Brain, Send, StopCircle, Cpu, RefreshCw } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -18,15 +18,140 @@ interface InputFormProps {
   hasHistory: boolean;
 }
 
+const MODEL_LIST_STORAGE_KEY = "research-agent:model-list";
+const SELECTED_MODEL_STORAGE_KEY = "research-agent:selected-model";
+
+function getCachedModelList(fallbackModels: string[]): string[] {
+  if (typeof window === "undefined") {
+    return fallbackModels;
+  }
+
+  const cachedModels = window.localStorage.getItem(MODEL_LIST_STORAGE_KEY);
+  if (!cachedModels) {
+    return fallbackModels;
+  }
+
+  try {
+    const parsedModels = JSON.parse(cachedModels) as string[];
+    return parsedModels.length > 0 ? parsedModels : fallbackModels;
+  } catch {
+    return fallbackModels;
+  }
+}
+
+function getInitialSelectedModel(availableModels: string[], fallbackModel: string): string {
+  if (typeof window === "undefined") {
+    return fallbackModel;
+  }
+
+  const cachedSelectedModel = window.localStorage.getItem(
+    SELECTED_MODEL_STORAGE_KEY
+  );
+  if (cachedSelectedModel && availableModels.includes(cachedSelectedModel)) {
+    return cachedSelectedModel;
+  }
+
+  return availableModels[0] ?? fallbackModel;
+}
+
 export const InputForm: React.FC<InputFormProps> = ({
   onSubmit,
   onCancel,
   isLoading,
   hasHistory,
 }) => {
+  const fallbackModels = [
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-3-flash-preview",
+    "gemini-3.1-flash-lite-preview",
+  ];
+  const initialModels = getCachedModelList(fallbackModels);
   const [internalInputValue, setInternalInputValue] = useState("");
   const [effort, setEffort] = useState("medium");
-  const [model, setModel] = useState("gemini-2.5-flash");
+  const [availableModels, setAvailableModels] = useState<string[]>(initialModels);
+  const [model, setModel] = useState(
+    getInitialSelectedModel(initialModels, "gemini-2.5-flash")
+  );
+  const [isRefreshingModels, setIsRefreshingModels] = useState(false);
+  const [hasInitializedModelState, setHasInitializedModelState] = useState(false);
+
+  useEffect(() => {
+    const cachedModels = window.localStorage.getItem(MODEL_LIST_STORAGE_KEY);
+    const cachedSelectedModel = window.localStorage.getItem(
+      SELECTED_MODEL_STORAGE_KEY
+    );
+
+    if (cachedModels && availableModels.length > 0) {
+      setHasInitializedModelState(true);
+      return;
+    }
+
+    if (cachedSelectedModel) {
+      setModel(cachedSelectedModel);
+    }
+    setHasInitializedModelState(true);
+
+    void refreshModels();
+  }, []);
+
+  useEffect(() => {
+    if (!hasInitializedModelState) {
+      return;
+    }
+    window.localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, model);
+  }, [hasInitializedModelState, model]);
+
+  const refreshModels = async () => {
+    try {
+      setIsRefreshingModels(true);
+
+      const response = await fetch("/api/models", {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
+
+      const data = (await response.json()) as {
+        models?: string[];
+        default_model?: string | null;
+      };
+      const models = data.models?.filter(Boolean) ?? [];
+      if (!models.length) {
+        return;
+      }
+
+      setAvailableModels(models);
+      window.localStorage.setItem(MODEL_LIST_STORAGE_KEY, JSON.stringify(models));
+
+      setModel((currentModel) => {
+        const cachedSelectedModel = window.localStorage.getItem(
+          SELECTED_MODEL_STORAGE_KEY
+        );
+        const resolvedModel =
+          currentModel && models.includes(currentModel)
+            ? currentModel
+            : cachedSelectedModel && models.includes(cachedSelectedModel)
+              ? cachedSelectedModel
+              : data.default_model && models.includes(data.default_model)
+                ? data.default_model
+                : models[0];
+        window.localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, resolvedModel);
+        return resolvedModel;
+      });
+    } catch {
+    } finally {
+      setIsRefreshingModels(false);
+    }
+  };
+
+  const handleModelChange = (nextModel: string) => {
+    if (!nextModel) {
+      return;
+    }
+    setModel(nextModel);
+  };
 
   const handleInternalSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -130,45 +255,38 @@ export const InputForm: React.FC<InputFormProps> = ({
               <Cpu className="h-4 w-4 mr-2" />
               Model
             </div>
-            <Select value={model} onValueChange={setModel}>
+            <Select value={model} onValueChange={handleModelChange}>
               <SelectTrigger className="w-[150px] bg-transparent border-none cursor-pointer">
                 <SelectValue placeholder="Model" />
               </SelectTrigger>
               <SelectContent className="bg-neutral-700 border-neutral-600 text-neutral-300 cursor-pointer">
-                <SelectItem
-                  value="gemini-2.5-flash-lite"
-                  className="hover:bg-neutral-600 focus:bg-neutral-600 cursor-pointer"
-                >
-                  <div className="flex items-center">
-                    <Zap className="h-4 w-4 mr-2 text-green-400" /> 2.5 Flash Lite
-                  </div>
-                </SelectItem>
-                <SelectItem
-                  value="gemini-2.5-flash"
-                  className="hover:bg-neutral-600 focus:bg-neutral-600 cursor-pointer"
-                >
-                  <div className="flex items-center">
-                    <Zap className="h-4 w-4 mr-2 text-orange-400" /> 2.5 Flash
-                  </div>
-                </SelectItem>
-                <SelectItem
-                  value="gemini-3-flash-preview"
-                  className="hover:bg-neutral-600 focus:bg-neutral-600 cursor-pointer"
-                >
-                  <div className="flex items-center">
-                    <Zap className="h-4 w-4 mr-2 text-yellow-400" /> 3 Flash Preview
-                  </div>
-                </SelectItem>
-                <SelectItem
-                  value="gemini-3.1-flash-lite-preview"
-                  className="hover:bg-neutral-600 focus:bg-neutral-600 cursor-pointer"
-                >
-                  <div className="flex items-center">
-                    <Cpu className="h-4 w-4 mr-2 text-purple-400" /> 3.1 Flash Lite Preview
-                  </div>
-                </SelectItem>
+                {availableModels.map((availableModel) => (
+                  <SelectItem
+                    key={availableModel}
+                    value={availableModel}
+                    className="hover:bg-neutral-600 focus:bg-neutral-600 cursor-pointer"
+                  >
+                    <div className="flex items-center">
+                      <Cpu className="h-4 w-4 mr-2 text-sky-400" />
+                      {availableModel}
+                    </div>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="cursor-pointer text-neutral-300 hover:text-white hover:bg-neutral-600/60"
+              onClick={() => void refreshModels()}
+              disabled={isRefreshingModels}
+              title="Reload models"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${isRefreshingModels ? "animate-spin" : ""}`}
+              />
+            </Button>
           </div>
         </div>
         {hasHistory && (
