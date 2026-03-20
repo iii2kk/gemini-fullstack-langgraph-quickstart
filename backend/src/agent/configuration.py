@@ -6,6 +6,28 @@ from typing import Any, Optional
 class Configuration(BaseModel):
     """The configuration for the agent."""
 
+    search_provider: str = Field(
+        default="gemini_google_search",
+        metadata={
+            "description": "The web search provider to use. Supported values: gemini_google_search, searxng."
+        },
+    )
+
+    searxng_base_url: str | None = Field(
+        default=None,
+        metadata={"description": "Base URL for a SearxNG instance, for example http://localhost:8080."},
+    )
+
+    searxng_result_limit: int = Field(
+        default=8,
+        metadata={"description": "Maximum number of SearxNG search results to use for synthesis."},
+    )
+
+    searxng_language: str = Field(
+        default="all",
+        metadata={"description": "Language parameter for SearxNG search, for example ja, en, or all."},
+    )
+
     llm_provider: str = Field(
         default="gemini",
         metadata={
@@ -29,7 +51,7 @@ class Configuration(BaseModel):
     )
 
     query_generator_model: str = Field(
-        default="gemini-2.0-flash",
+        default="gemini-2.5-flash",
         metadata={
             "description": "The name of the language model to use for the agent's query generation."
         },

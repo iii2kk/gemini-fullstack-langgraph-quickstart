@@ -18,23 +18,19 @@ from datetime import datetime
 from typing import AsyncGenerator, Any, Callable
 
 from dotenv import load_dotenv
-from google.genai import Client
 
 from agent.configuration import Configuration
 from agent.llm_factory import LLMFactory
+from agent.search_providers import create_search_provider
 from agent.tools_and_schemas import SearchQueryList, Reflection
 from agent.prompts import (
     get_current_date,
     query_writer_instructions,
-    web_searcher_instructions,
     reflection_instructions,
     answer_instructions,
 )
 from agent.utils import (
-    get_citations,
     get_research_topic,
-    insert_citation_markers,
-    resolve_urls,
 )
 
 load_dotenv()
@@ -145,13 +141,6 @@ async def _rate_limited(fn: Callable, *args: Any, max_attempts: int = 5) -> Any:
 
     raise RuntimeError("max_attempts を超えました")
 
-def _create_genai_client(config: Configuration) -> Client:
-    api_key = config.gemini_api_key or os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY is not set")
-    return Client(api_key=api_key)
-
-
 # ---------------------------------------------------------------------------
 # Synchronous worker functions (run in thread pool via asyncio.to_thread)
 # ---------------------------------------------------------------------------
@@ -185,42 +174,18 @@ def _web_research_sync(
     config: Configuration,
     model: str | None = None,
 ) -> dict:
-    formatted_prompt = web_searcher_instructions.format(
-        current_date=get_current_date(),
-        research_topic=search_query,
-    )
-    resolved_model = config.query_generator_model
-    genai_client = _create_genai_client(config)
-    logger.info(f"\n{SEP}\n[web_research] REQUEST\n  model : {resolved_model}\n  query : {search_query}\n  tools : google_search\n  prompt:\n{formatted_prompt}\n{SEP}")
-
-    response = genai_client.models.generate_content(
+    if config.search_provider == "gemini_google_search":
+        resolved_model = config.query_generator_model
+    else:
+        resolved_model = model or config.query_generator_model
+    provider = create_search_provider(config)
+    return provider.web_research(
+        search_query,
+        idx,
         model=resolved_model,
-        contents=formatted_prompt,
-        config={
-            "tools": [{"google_search": {}}],
-            "temperature": 0,
-        },
+        logger=logger,
+        sep=SEP,
     )
-    grounding_chunks = (
-        response.candidates[0].grounding_metadata.grounding_chunks
-        if response.candidates and response.candidates[0].grounding_metadata
-        else []
-    )
-    source_urls = [c.web.uri for c in grounding_chunks if hasattr(c, "web")]
-    logger.info(f"\n{SEP}\n[web_research] RESPONSE\n  model  : {resolved_model}\n  query  : {search_query}\n  sources: {source_urls}\n  text   :\n{response.text}\n{SEP}")
-
-    resolved_urls = resolve_urls(
-        response.candidates[0].grounding_metadata.grounding_chunks, idx
-    )
-    citations = get_citations(response, resolved_urls)
-    modified_text = insert_citation_markers(response.text, citations)
-    sources_gathered = [item for citation in citations for item in citation["segments"]]
-
-    return {
-        "sources_gathered": sources_gathered,
-        "search_query": search_query,
-        "web_research_result": modified_text,
-    }
 
 
 def _reflect_sync(
