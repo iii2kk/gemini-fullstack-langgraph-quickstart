@@ -9,7 +9,7 @@ class Configuration(BaseModel):
     search_provider: str = Field(
         default="gemini_google_search",
         metadata={
-            "description": "The web search provider to use. Supported values: gemini_google_search, searxng."
+            "description": "The web search provider to use. Supported values: gemini_google_search, searxng, 4get."
         },
     )
 
@@ -26,6 +26,31 @@ class Configuration(BaseModel):
     searxng_language: str = Field(
         default="all",
         metadata={"description": "Language parameter for SearxNG search, for example ja, en, or all."},
+    )
+
+    fourget_base_url: str = Field(
+        default="https://4get.ca",
+        metadata={"description": "Base URL for a 4get instance, for example https://4get.ca."},
+    )
+
+    fourget_result_limit: int = Field(
+        default=8,
+        metadata={"description": "Maximum number of 4get web results to use for synthesis."},
+    )
+
+    fourget_country: str | None = Field(
+        default=None,
+        metadata={"description": "Optional 4get country filter for web search, for example ja_JP."},
+    )
+
+    fourget_extended_search: bool = Field(
+        default=False,
+        metadata={"description": "Whether to enable 4get extendedsearch for richer result data."},
+    )
+
+    fourget_pass_token: str | None = Field(
+        default=None,
+        metadata={"description": "Optional 4get pass token sent as a cookie named 'pass'."},
     )
 
     llm_provider: str = Field(
