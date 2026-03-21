@@ -64,7 +64,7 @@ SEP = "=" * 60
 # Rate limiter: 1 API call per RATE_LIMIT_INTERVAL seconds
 # ---------------------------------------------------------------------------
 
-RATE_LIMIT_INTERVAL = 10.0  # seconds
+RATE_LIMIT_INTERVAL = 0.0  # seconds
 
 
 class _RateLimiter:
